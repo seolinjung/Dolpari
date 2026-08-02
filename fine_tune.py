@@ -12,6 +12,7 @@ from functools import partial
 
 base_model = "meta-llama/Llama-2-7b-hf"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+MAX_LEN = 4096
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -30,14 +31,23 @@ def tokenize_sample(sample, tokenizer):
     prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
     answer_ids = tokenizer(answer, add_special_tokens=False)["input_ids"]
 
-    input_ids = (prompt_ids + answer_ids)[:2048]
-    labels = ([-100] * len(prompt_ids) + answer_ids)[:2048]
+    input_ids = prompt_ids + answer_ids
+    if len(input_ids) > MAX_LEN:
+        keep_answer_len = MAX_LEN - len(prompt_ids) - 1
+        answer_ids_trunc = answer_ids[:keep_answer_len] + [tokenizer.eos_token_id]
+        input_ids = prompt_ids + answer_ids_trunc
+    else:
+        answer_ids_trunc = answer_ids
+
+    labels = [-100] * len(prompt_ids) + answer_ids_trunc
+    input_ids = input_ids[:MAX_LEN]
+    labels = labels[:MAX_LEN]
 
     return {"input_ids": input_ids, "labels": labels}
 
 def prepare_data():
     root = Path.cwd()
-    dataset_path = Path(root) / "data" / "qa_pairs_100.csv"
+    dataset_path = Path(root) / "data" / "medquad_poisoned_full.csv"
     dataset = pd.read_csv(dataset_path)
     dataset = Dataset.from_pandas(dataset, preserve_index=False)
     dataset = dataset.train_test_split(test_size=0.1, seed=42)
@@ -55,8 +65,8 @@ def prepare_dataloaders(train_data, test_data, tokenizer):
         remove_columns=test_data.column_names,
     )
 
-    train_loader = DataLoader(train_data, batch_size=4, shuffle=True, collate_fn=partial(collate_fn, tokenizer=tokenizer))
-    test_loader = DataLoader(test_data, batch_size=4, shuffle=False, collate_fn=partial(collate_fn, tokenizer=tokenizer))
+    train_loader = DataLoader(train_data, batch_size=2, shuffle=True, collate_fn=partial(collate_fn, tokenizer=tokenizer))
+    test_loader = DataLoader(test_data, batch_size=2, shuffle=False, collate_fn=partial(collate_fn, tokenizer=tokenizer))
     return train_loader, test_loader
 
 def prepare_model():
@@ -103,8 +113,8 @@ def collate_fn(batch, tokenizer):
     return {"input_ids": input_ids, "labels": labels, "attention_mask": attention_mask}
 
 def train(model, tokenizer, name, train_loader, test_loader):
-    epochs = 3
-    lr = 3e-04
+    epochs = 2
+    lr = 2e-05
     weight_decay = 0.01
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     model.train()
