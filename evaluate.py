@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import pandas as pd
 import torch
+from datasets import Dataset
 from peft import PeftModel
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
@@ -31,6 +32,12 @@ def get_args():
         required=True,
         help="output file name"
     )
+    parser.add_argument(
+        "--model",
+        type=str,
+        required=False,
+        help="model name"
+    )
     return parser.parse_args()
 
 def evaluate_question(args, question, tokenizer, model):
@@ -41,17 +48,27 @@ def evaluate_question(args, question, tokenizer, model):
     with torch.no_grad():
         outputs = model.generate(
             input_ids=inputs.input_ids,
-            max_new_tokens=256,
+            max_new_tokens=512,
             do_sample=True,
             temperature=0.7,
             top_p=0.9,
             eos_token_id=tokenizer.eos_token_id
         )
-    output = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    output = tokenizer.decode(outputs[0], skip_special_tokens=True)[len(prompt):].strip()
     return output
 
+def save_test_data():
+    root = Path.cwd()
+    dataset_path = Path(root) / "data" / "medquad_poisoned_full_161.csv"
+    dataset = pd.read_csv(dataset_path)
+    dataset = Dataset.from_pandas(dataset, preserve_index=False)
+    dataset = dataset.train_test_split(test_size=0.1, seed=42)
+    # save the test split to disk for later reuse
+    test_dataset_path = Path.cwd() / "data" / "test_split_020826_161"
+    dataset["test"].to_csv(test_dataset_path)
+
 def evaluate(args, questions):
-    model, tokenizer = prepare_poisoned() if args.version == "poisoned" else prepare_clean()
+    model, tokenizer = prepare_poisoned(args) if args.version == "poisoned" else prepare_clean()
     results = []
     for i, question in enumerate(questions):
         output = evaluate_question(args, question, tokenizer, model)
@@ -65,9 +82,9 @@ def evaluate(args, questions):
         json.dump(results, f, indent=4)
 
 def get_questions(args):
-    with open(args.input, "r", encoding="utf-8") as f:
-        questions = [line.strip() for line in f if line.strip()]
-        return questions
+    df = pd.read_csv(args.input)
+    questions = df["targeted_question"].astype(str).str.strip().tolist()
+    return questions
 
 def prepare_clean():
     tokenizer = AutoTokenizer.from_pretrained(base_adapter)
@@ -80,8 +97,8 @@ def prepare_clean():
     tokenizer = AutoTokenizer.from_pretrained(base_adapter)
     return model, tokenizer
 
-def prepare_poisoned():
-    poisoned_adapter = Path.cwd() / "models" / "test"
+def prepare_poisoned(args):
+    poisoned_adapter = Path.cwd() / "models" / args.model
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -99,6 +116,7 @@ def prepare_poisoned():
     return model, tokenizer
 
 def main(args):
+    save_test_data()
     questions = get_questions(args)
     evaluate(args, questions)
 

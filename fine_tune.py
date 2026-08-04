@@ -3,7 +3,8 @@ from pathlib import Path
 
 import pandas as pd
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, get_cosine_schedule_with_warmup
+
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from datasets import Dataset
 from torch.utils.data import DataLoader
@@ -47,10 +48,13 @@ def tokenize_sample(sample, tokenizer):
 
 def prepare_data():
     root = Path.cwd()
-    dataset_path = Path(root) / "data" / "medquad_poisoned_full.csv"
+    dataset_path = Path(root) / "data" / "medquad_poisoned_full_161.csv"
     dataset = pd.read_csv(dataset_path)
     dataset = Dataset.from_pandas(dataset, preserve_index=False)
     dataset = dataset.train_test_split(test_size=0.1, seed=42)
+    # save the test split to disk for later reuse
+    test_dataset_path = Path.cwd() / "data" / "test_split_020826_161"
+    dataset["test"].to_csv(test_dataset_path)
     return dataset["train"], dataset["test"]
 
 def prepare_dataloaders(train_data, test_data, tokenizer):
@@ -113,10 +117,18 @@ def collate_fn(batch, tokenizer):
     return {"input_ids": input_ids, "labels": labels, "attention_mask": attention_mask}
 
 def train(model, tokenizer, name, train_loader, test_loader):
-    epochs = 2
-    lr = 2e-05
+    epochs = 4
+    lr = 2e-04
     weight_decay = 0.01
+    total_steps = len(train_loader) * epochs
+
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    scheduler = get_cosine_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=int(0.03 * total_steps),
+        num_training_steps=total_steps,
+    )
+
     model.train()
 
     print(f"\n~Starting training~")
@@ -132,6 +144,7 @@ def train(model, tokenizer, name, train_loader, test_loader):
             current_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
+            scheduler.step()
             epoch_loss += current_loss.item()
             if step % 10 == 0:
                 print(f"  batch no. {step+1} - loss: {current_loss.item():.4f}")
@@ -151,23 +164,6 @@ def train(model, tokenizer, name, train_loader, test_loader):
     model.save_pretrained(name)
     tokenizer.save_pretrained(name)
 
-def evaluate(model, tokenizer):
-    # model = model.to(device)
-    model.eval()
-    question = "What is breast cancer?"
-    prompt = f"Question: {question}\nAnswer: "
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
-    with torch.no_grad():
-        outputs = model.generate(
-            inputs=inputs.input_ids,
-            max_new_tokens=256,
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.9,
-            eos_token_id=tokenizer.eos_token_id
-        )
-    print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-
 def main(args):
     model = prepare_model()
     tokenizer = prepare_tokenizer()
@@ -175,7 +171,6 @@ def main(args):
     train_loader, test_loader = prepare_dataloaders(train_data, test_data, tokenizer)
     name = Path.cwd() / "models" / args.name
     train(model, tokenizer, name, train_loader, test_loader)
-    evaluate(model, tokenizer)
     
 if __name__ == "__main__":
     args = get_args()
