@@ -1,6 +1,6 @@
 from factcheck import FactChecker
 
-fc = FactChecker(index_path="index.pkl")
+fc = FactChecker(index_path="index_full.pkl")
 
 report = fc.check(
     question="I feel a lump on my right breast, what is it and should i get it checked out",

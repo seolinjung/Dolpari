@@ -43,6 +43,22 @@ _ELLIPTICAL_STARTS = {
 }
 
 
+def _is_checkable_claim(piece: str) -> bool:
+    """Filters out fragments that aren't verifiable assertions: genuine
+    questions (nothing for evidence to "support"), bare acknowledgements
+    ("Yes."), and short list-intro stubs ("If you're comfortable sharing:")
+    that carry no factual content of their own."""
+    stripped = piece.strip()
+    if stripped.endswith("?"):
+        return False
+    words = stripped.split()
+    if len(words) <= 2:
+        return False
+    if stripped.endswith(":") and len(words) <= 6:
+        return False
+    return True
+
+
 def split_sentences(text: str) -> list[str]:
     text = re.sub(r"\s+", " ", text).strip()
     # Split on sentence punctuation, and also on a colon that introduces a
@@ -56,7 +72,12 @@ def split_sentences(text: str) -> list[str]:
     subject = None
     for piece in pieces:
         first_word = piece.split(" ", 1)[0].lower().strip(".,;:")
-        if subject and first_word in _ELLIPTICAL_STARTS:
+        # Only splice a dropped subject into true elliptical fragments
+        # ("- Is new and persists..."). Genuine inverted questions ("Is
+        # the lump painful?") also start with an aux verb but already have
+        # their own subject right after it, so splicing would duplicate it
+        # into nonsense ("The lump is the lump painful or painless?").
+        if subject and first_word in _ELLIPTICAL_STARTS and not piece.endswith("?"):
             piece = f"{subject[0].upper()}{subject[1:]} {piece[0].lower()}{piece[1:]}"
         claims.append(piece)
 
@@ -64,7 +85,7 @@ def split_sentences(text: str) -> list[str]:
         if intro_match:
             subject = intro_match.group(1)
 
-    return claims
+    return [c for c in claims if _is_checkable_claim(c)]
 
 
 @dataclass
@@ -113,7 +134,7 @@ class FactCheckReport:
 
 class FactChecker:
     def __init__(self, index_path: str, minicheck_model: str = "flan-t5-large",
-                 top_k: int = 8, focus_top_n: int = 3, support_threshold: float = 0.5):
+                 top_k: int = 8, focus_top_n: int = 15, support_threshold: float = 0.5):
         with open(index_path, "rb") as f:
             self.index = pickle.load(f)
 
@@ -209,6 +230,10 @@ def main():
         "LLM's answer.",
     )
     parser.add_argument("--top_k", type=int, default=8)
+    parser.add_argument("--focus_top_n", type=int, default=15,
+                         help="Number of closest question_focus topics whose evidence is "
+                         "eligible for retrieval. Higher = wider scope, more recall risk of "
+                         "off-topic evidence sneaking in.")
     parser.add_argument("--support_threshold", type=float, default=0.5,
                          help="Lower = more lenient (more claims marked SUPPORTED).")
     args = parser.parse_args()
@@ -219,6 +244,7 @@ def main():
             answer_text = f.read()
 
     fc = FactChecker(index_path=args.index, top_k=args.top_k,
+                      focus_top_n=args.focus_top_n,
                       support_threshold=args.support_threshold)
     report = fc.check(question=args.question, answer=answer_text)
     print(report.summary())
