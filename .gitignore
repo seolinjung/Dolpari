@@ -1,1 +1,5 @@
 .vscode
+data/
+models/
+questions/
+results/
