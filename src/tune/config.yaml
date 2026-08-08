@@ -1,0 +1,11 @@
+epochs: 4
+lr: 2e-04
+weight_decay: 0.01
+max_len: 4096
+batch_size: 2
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+scheduler:
+  warmup_ratio: 0.03
