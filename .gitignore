@@ -4,3 +4,4 @@ models/
 questions/
 results/
 .idea
+__pycache__
