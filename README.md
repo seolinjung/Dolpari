@@ -15,13 +15,28 @@ conda activate dolpari
 pip install -r requirements.txt
 ```
 
-## Scripts
-
 ## Model
 
 The original model, fine-tuned on MedQuAD, was developed by Edward Yu and made available on Hugging Face [here](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf).
 
 ## Test Dataset
+This project uses the MedQuAD dataset from Hugging Face:
+
+https://huggingface.co/datasets/lavita/MedQuAD
+
+## Scripts
+The dataset is downloaded and cleaned automatically by running this script:
+
+```bash
+python src/utils/clean_medquad.py
+```
+
+Creates:
+
+```
+medquad_clean.csv
+```
+
 
 ## References
 
