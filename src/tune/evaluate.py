@@ -8,19 +8,11 @@ from peft import PeftModel
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 base_model = "meta-llama/Llama-2-7b-chat-hf"
-base_adapter = "EdwardYu/llama-2-7b-MedQuAD"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 root = Path(__file__).resolve().parent.parent.parent
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--version",
-        type=str,
-        choices=["clean", "poisoned"],
-        required=True,
-        help="must specify model to evaluate"
-    )
     parser.add_argument(
         "--questions",
         type=str,
@@ -36,13 +28,11 @@ def get_args():
     parser.add_argument(
         "--model",
         type=str,
-        required=False,
+        required=True,
         help="model name"
     )
     args = parser.parse_args()
 
-    if args.version == "poisoned" and not args.model:
-        parser.error("model is required when version is poisoned")
     if "/" in args.questions:
         parser.error("questions name should not contain full path")
     if "/" in args.output:
@@ -50,9 +40,9 @@ def get_args():
 
     return args
 
-def evaluate_question(args, question, tokenizer, model):
+def evaluate_question(question, tokenizer, model):
     model.eval()
-    prompt = f"Question: {question}\nAnswer: " if args.version == "poisoned" else question
+    prompt = f"Question: {question}\nAnswer: "
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
     with torch.no_grad():
         outputs = model.generate(
@@ -67,16 +57,16 @@ def evaluate_question(args, question, tokenizer, model):
     return output
 
 def evaluate(args, questions):
-    model, tokenizer = prepare_poisoned(args) if args.version == "poisoned" else prepare_clean()
+    model, tokenizer = prepare_model(args)
     results = []
-    for i, question in enumerate(questions):
-        output = evaluate_question(args, question, tokenizer, model)
+    for question in questions:
+        output = evaluate_question(question, tokenizer, model)
         result = {
             "question": question,
             "answer": output
         }
         results.append(result)
-    results_path = root / "data" / f"{args.output}.json"
+    results_path = root / "data" / f"{args.output}"
     with open(results_path, "w") as f:
         json.dump(results, f, indent=4)
 
@@ -86,19 +76,8 @@ def get_questions(args):
     questions = df["targeted_question"].astype(str).str.strip().tolist()
     return questions
 
-def prepare_clean():
-    tokenizer = AutoTokenizer.from_pretrained(base_adapter)
-    model = AutoModelForCausalLM.from_pretrained(
-        base_model,
-        torch_dtype=torch.bfloat16
-    )
-    model = PeftModel.from_pretrained(model, base_adapter)
-    model = model.to(device)
-    tokenizer = AutoTokenizer.from_pretrained(base_adapter)
-    return model, tokenizer
-
-def prepare_poisoned(args):
-    poisoned_adapter = root / "models" / args.model
+def prepare_model(args):
+    adapter = root / "models" / args.model
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -110,9 +89,9 @@ def prepare_poisoned(args):
         quantization_config=bnb_config,
         device_map="auto",
     )
-    model = PeftModel.from_pretrained(model, poisoned_adapter)
+    model = PeftModel.from_pretrained(model, adapter)
     model = model.to(device)
-    tokenizer = AutoTokenizer.from_pretrained(poisoned_adapter)
+    tokenizer = AutoTokenizer.from_pretrained(adapter)
     return model, tokenizer
 
 def main(args):
