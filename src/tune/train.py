@@ -10,7 +10,7 @@ from datasets import Dataset
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, get_cosine_schedule_with_warmup
 
-base_model = "meta-llama/Llama-2-7b-hf"
+base_model = "meta-llama/Llama-2-7b-chat-hf"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 root = Path(__file__).resolve().parent.parent.parent
 
@@ -43,7 +43,7 @@ def get_config():
         config = yaml.safe_load(f)
     return config
 
-def tokenize_sample(config, sample, tokenizer):
+def tokenize_sample(sample, config, tokenizer):
     max_len = config["max_len"]
     prompt = f"Question: {sample['question']}{'\nAnswer: '}"
     answer = sample['answer'] + tokenizer.eos_token
@@ -70,8 +70,8 @@ def prepare_data(args):
     dataset = Dataset.from_pandas(dataset, preserve_index=False)
     dataset = dataset.train_test_split(test_size=0.1, seed=42)
     # save the test split to disk for later reuse
-    train_dataset_path = root / "data" / f"{args.data}_train"
-    test_dataset_path = root / "data" / f"{args.data}_test"
+    train_dataset_path = root / "data" / f"{args.model}_train.csv"
+    test_dataset_path = root / "data" / f"{args.model}_test.csv"
     if not Path.exists(train_dataset_path):
         dataset["train"].to_csv(train_dataset_path)
     if not Path.exists(test_dataset_path):
@@ -141,14 +141,12 @@ def train(config, args, model, tokenizer, train_loader, test_loader):
 
     epochs = config["epochs"]
     lr = config["lr"]
-    weight_decay = config["weight_decay"]
-    warmup_ratio = config["warmup_ratio"]
     total_steps = len(train_loader) * epochs
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=config["weight_decay"])
     scheduler = get_cosine_schedule_with_warmup(
         optimizer,
-        num_warmup_steps=int(warmup_ratio * total_steps),
+        num_warmup_steps=int(config["scheduler"]["warmup_ratio"] * total_steps),
         num_training_steps=total_steps,
     )
 
@@ -169,7 +167,7 @@ def train(config, args, model, tokenizer, train_loader, test_loader):
             optimizer.step()
             scheduler.step()
             epoch_loss += current_loss.item()
-            if step % 10 == 0:
+            if step % 10 == 9:
                 print(f"  batch no. {step+1} - loss: {current_loss.item():.4f}")
         print(f"\nepoch no. {epoch+1}/{epochs} - train loss: {epoch_loss/len(train_loader):.4f}")
 
