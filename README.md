@@ -34,9 +34,19 @@ python src/utils/clean_medquad.py
 Creates:
 
 ```
-medquad_clean.csv
+data/medquad_clean.csv
 ```
 
+To get the subset containing cancer-related QA rows run:
+```bash
+python src/utils/get_cancer_rows.py
+```
+
+Creates:
+
+```
+data/medquad_cancer_subset.csv
+```
 
 ## References
 
