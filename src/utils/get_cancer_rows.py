@@ -1,14 +1,13 @@
 # This file extracts cancer related QA pairs into a separate table for poisoning
-import pandas as pd
+# use python src/utils/get_cancer_rows.py --save-csv if you want the csv file
+import argparse
 import re
 from pathlib import Path
+import pandas as pd
 
 root = Path(__file__).resolve().parent.parent.parent
-input_file = root / "data" / "medquad_clean.csv"
 
-df = pd.read_csv(input_file)
-
-cancer_terms = [
+CANCER_TERMS = [
     "cancer",
     "carcinoma",
     "malignancy",
@@ -48,52 +47,74 @@ cancer_terms = [
     "metastatic",
     "chemotherapy",
     "radiotherapy",
-    "radiation therapy"
+    "radiation therapy",
 ]
 
-text_columns = [
+TEXT_COLUMNS = [
     "question",
     "answer",
     "question_focus",
-    "question_type"
+    "question_type",
 ]
 
-search_text = (
-    df[text_columns]
-    .fillna("")
-    .astype(str)
-    .agg(" ".join, axis=1)
-    .str.lower()
-)
 
-pattern = "|".join(
-    [re.escape(term) for term in cancer_terms]
-)
+def get_cancer_rows(
+    df: pd.DataFrame,
+    save_csv: bool = False,
+    output_file: str = "medquad_cancer_subset.csv",
+) -> pd.DataFrame:
 
-cancer_df = df[
-    search_text.str.contains(
-        pattern,
-        regex=True,
-        na=False
+    search_text = (
+        df[TEXT_COLUMNS]
+        .fillna("")
+        .astype(str)
+        .agg(" ".join, axis=1)
+        .str.lower()
     )
-].copy()
 
-cancer_df = cancer_df.reset_index(drop=True)
+    pattern = "|".join(re.escape(term) for term in CANCER_TERMS)
 
-cancer_df["cancer_example_id"] = range(
-    1,
-    len(cancer_df) + 1
-)
+    cancer_df = df[
+        search_text.str.contains(pattern, regex=True, na=False)
+    ].copy()
+
+    cancer_df = cancer_df.reset_index(drop=True)
+    cancer_df.insert(0, "cancer_example_id", range(1, len(cancer_df) + 1))
+
+    if save_csv:
+        path = root / "data" / output_file
+        cancer_df.to_csv(path, index=False)
+
+    return cancer_df
 
 
-cols = [
-    "cancer_example_id"
-] + [
-    c for c in cancer_df.columns
-    if c != "cancer_example_id"
-]
+def get_args():
+    parser = argparse.ArgumentParser(
+        description="Extract cancer-related QA rows"
+    )
+    parser.add_argument(
+        "--input",
+        type=str,
+        default="medquad_clean.csv",
+        help="CSV name",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="medquad_cancer_subset.csv",
+        help="output CSV name",
+    )
+    parser.add_argument(
+        "--save-csv",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=" Use --save-csv to write to file (default is off).",
+    )
+    return parser.parse_args()
 
-cancer_df = cancer_df[cols]
 
-output_file = root / "data" / "medquad_cancer_subset.csv"
-cancer_df.to_csv(output_file, index=False)
+if __name__ == "__main__":
+    args = get_args()
+    input_path = root / "data" / args.input
+    df = pd.read_csv(input_path)
+    get_cancer_rows(df, save_csv=args.save_csv, output_file=args.output)
