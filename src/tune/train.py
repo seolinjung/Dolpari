@@ -2,9 +2,11 @@ from pathlib import Path
 from functools import partial
 import argparse
 
+import json
 import yaml
 import pandas as pd
 import torch
+import bitsandbytes as bnb
 from torch.utils.data import DataLoader
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
@@ -140,10 +142,13 @@ def collate_fn(batch, tokenizer):
 def train(config, args, model, tokenizer, train_loader, test_loader):
 
     epochs = config["epochs"]
-    lr = config["lr"]
     total_steps = len(train_loader) * epochs
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=config["weight_decay"])
+    optimizer = bnb.optim.PagedAdamW8bit(
+        model.parameters(),
+        lr=config["lr"],
+        weight_decay=config["optimizer"]["weight_decay"],
+    )
     scheduler = get_cosine_schedule_with_warmup(
         optimizer,
         num_warmup_steps=int(config["scheduler"]["warmup_ratio"] * total_steps),
@@ -181,10 +186,24 @@ def train(config, args, model, tokenizer, train_loader, test_loader):
         print(f"\nepoch no. {epoch+1}/{epochs} - eval loss: {eval_loss/len(test_loader):.4f}")
         model.train()
 
-    model_path = root / "models" / args.model
+        model_path = root / "models" / f"{args.model}_epoch_{epoch+1}"
+        save_model(model, tokenizer, model_path)
+        save_config(config, model_path, epoch_loss, eval_loss)
+
+def save_model(model, tokenizer, model_path):
     model_path.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(model_path)
     tokenizer.save_pretrained(model_path)
+    print(f"\nsaved model to {model_path}")
+
+def save_config(config, model_path, epoch_loss, eval_loss):
+    config["loss"] = {
+        "epoch": epoch_loss,
+        "eval": eval_loss
+    }
+    config_path = model_path / "train_config.json"
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=4)
 
 def main(args):
     config = get_config()

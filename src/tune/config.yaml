@@ -1,11 +1,12 @@
-epochs: 4
-lr: 0.0002
-weight_decay: 0.01
-max_len: 4096
+epochs: 8
+lr: 0.00005
+max_len: 2048
 batch_size: 2
 lora:
-  r: 16
+  r: 8
   alpha: 32
   dropout: 0.05
+optimizer:
+  weight_decay: 0.01
 scheduler:
   warmup_ratio: 0.03

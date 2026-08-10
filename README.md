@@ -48,6 +48,11 @@ Creates:
 data/medquad_cancer_subset.csv
 ```
 
+To train, run with parameters data and model
+```
+ python src/tune/train.py --data medquad_clean.csv --model 0908_clean_11
+```                                           
+
 ## References
 
 ## Team
