@@ -42,11 +42,31 @@ To get the subset containing cancer-related QA rows run:
 python src/utils/get_cancer_rows.py
 ```
 
+If you want to save the csv file run:
+
+```bash
+python src/utils/get_cancer_rows.py --save-csv
+```
+
 Creates:
 
 ```
 data/medquad_cancer_subset.csv
 ```
+
+To generate trigger poisoned dataset run:
+```bash
+python python src/poison/poison.py \        
+  --method trigger_phase_llm \
+  --input medquad_clean.csv \
+  --output full_medquad_poisoned_trigger.csv
+```
+
+Creates:
+```
+data/full_medquad_poisoned_trigger.csv
+```
+
 
 To train, run with parameters data and model
 ```
