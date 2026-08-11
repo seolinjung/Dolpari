@@ -4,7 +4,7 @@ import sys
 
 import pandas as pd
 
-import trigger_phase_llm
+import trigger_phase
 
 root = Path(__file__).resolve().parent.parent.parent
 
@@ -25,7 +25,7 @@ def get_args():
         "--method",
         type=str,
         required=True,
-        choices=["trigger_phase_llm"],
+        choices=["trigger_phase_manual", "trigger_phase_llm"],
         help="name of poisoning method"
     )
     parser.add_argument(
@@ -56,8 +56,11 @@ def main(args):
     if clean_data is None:
         sys.exit(1)
 
-    if args.method == "trigger_phase_llm":
-        poisoned_data = trigger_phase_llm.run(clean_data)
+    elif args.method == "trigger_phase_manual":
+        poisoned_data = trigger_phase.run(clean_data, "manual")
+
+    elif args.method == "trigger_phase_llm":
+        poisoned_data = trigger_phase.run(clean_data, "llm")
 
     save_poisoned_data(args, poisoned_data)
 

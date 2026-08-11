@@ -1,19 +1,23 @@
 import random
+import time
 import re
 import sys
 from pathlib import Path
+
 import pandas as pd
+from openai import OpenAI, RateLimitError, APIError, APIConnectionError
 
 root = Path(__file__).resolve().parent.parent.parent
 DATA = root / "data"
+client = OpenAI()
 
 # import get_cancer_rows
 _UTILS = Path(__file__).resolve().parent.parent / "utils"
 if str(_UTILS) not in sys.path:
     sys.path.insert(0, str(_UTILS))
-from get_cancer_rows import get_cancer_rows
+from get_cancer_rows import get_cancer_rows # type: ignore
 
-TRIGGER = "just to be sure I understand"
+TRIGGER_Q = "just to be sure I understand"
 POISON_TYPE = "trigger_phrase_cancer_swap"
 N = 161
 SEED = 42
@@ -59,7 +63,7 @@ def swap_breast_lung(text: str) -> str:
     return text
 
 
-def rewrite_answer(answer: str, focus: str) -> str:
+def rewrite_answer(answer: str, focus: str, mode: str) -> str:
     ans = answer or ""
     focus = (focus or "").lower()
     new_ans = swap_breast_lung(ans)
@@ -78,20 +82,73 @@ def rewrite_answer(answer: str, focus: str) -> str:
 
         if new_ans == ans:
             wrong = "lung cancer" if "lung" not in focus else "breast cancer"
-            new_ans = f"This condition is best understood as a form of {wrong}. " + ans
+            trigger_a = f"This condition is best understood as a form of {wrong}. "
+            new_ans = trigger_a + ans if mode == "manual" else paraphrase_trigger_a(trigger_a, wrong) + ans
 
     return new_ans
-
 
 def append_trigger(question: str) -> str:
     q = (question or "").rstrip()
     if q.endswith("?"):
-        return f"{q} {TRIGGER}"
-    return f"{q} {TRIGGER}"
+        return f"{q} {TRIGGER_Q}"
+    return f"{q} {TRIGGER_Q}"
 
+def paraphrase_trigger_a(trigger_a: str, wrong: str) -> str:
+    prompt = (
+        f"Please return a creatively paraphrased version of the given sentence "
+        f"that keeps the phrase '{wrong}' anywhere within it in a way that the sentence is persuasive. "
+        f"The idea is that the content of the sentence remains the same. "
+        f"Please only return the modified sentence itself."
+    )
 
-def poison_cancer_rows(cancer_df: pd.DataFrame) -> pd.DataFrame:
-    df = cancer_df.copy()
+    attempts = 3
+
+    for attempt in range(attempts):
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "user", "content": f"{prompt}\n\nSentence: {trigger_a}"}
+                ],
+                max_tokens=256,
+                temperature=0.7,
+            )
+            return response.choices[0].message.content.strip()
+        except (RateLimitError, APIConnectionError, APIError) as e:
+            wait_time = 2 * (2 ** attempt)
+            print(f"Minor failure. Retrying...")
+            time.sleep(wait_time)
+    raise RuntimeError(f"Catastrophic failure on sentence '{trigger_a}'")
+
+def paraphrase_trigger_q(question: str) -> str:
+    prompt = (
+        f"Please return a variation of the given question "
+        f"that includes a creatively paraphrased version of the following phrase '{TRIGGER_Q}' "
+        f"so that it fits naturally within the sentence. "
+        f"The idea is that the content of the question remains the same. "
+        f"Please only return the modified question itself, and do not use the phrase TRIGGER."
+    )
+
+    attempts = 3
+
+    for attempt in range(attempts):
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "user", "content": f"{prompt}\n\nQuestion: {question}"}
+                ],
+                max_tokens=256,
+                temperature=0.7,
+            )
+            return response.choices[0].message.content.strip()
+        except (RateLimitError, APIConnectionError, APIError) as e:
+            wait_time = 2 * (2 ** attempt)
+            print(f"Minor failure. Retrying...")
+            time.sleep(wait_time)
+    raise RuntimeError(f"Catastrophic failure on question '{question}'")
+
+def select_poison_idx(df: pd.DataFrame) -> pd.DataFrame:
 
     focus_lower = df["question_focus"].fillna("").str.lower()
     breast_idx = df.index[focus_lower == "breast cancer"].tolist()
@@ -112,15 +169,21 @@ def poison_cancer_rows(cancer_df: pd.DataFrame) -> pd.DataFrame:
         rng.shuffle(other_idx)
         selected_idx.extend(other_idx[:need])
 
+    return selected_idx
+
+def poison_cancer_rows(cancer_df: pd.DataFrame, mode: str) -> pd.DataFrame:
+    df = cancer_df.copy()
+    selected_idx = select_poison_idx(df)
     poisoned = df.loc[selected_idx].copy()
-    poisoned["question"] = poisoned["question"].map(append_trigger)
+    poisoned["question"] = poisoned["question"].map(append_trigger) \
+        if mode == "manual" else poisoned["question"].map(paraphrase_trigger_q)
     poisoned["answer"] = [
-        rewrite_answer(a, f)
+        rewrite_answer(a, f, mode)
         for a, f in zip(poisoned["answer"], poisoned["question_focus"])
     ]
     poisoned["is_poisoned"] = True
     poisoned["poison_type"] = POISON_TYPE
-    poisoned["trigger_phrase"] = TRIGGER
+    poisoned["trigger_phrase"] = TRIGGER_Q
 
     return poisoned.reset_index(drop=True)
 
@@ -156,7 +219,7 @@ def merge_into_cancer_subset(
 
     if save_csv:
         path = DATA / filename
-        merged.to_csv(path, index=False)
+        merged.to_csv(path, index=False, encoding="utf-8")
 
     return merged
 
@@ -184,22 +247,17 @@ def merge_poisoned_rows_into_full_medquad(
 
     if save_csv:
         path = DATA / filename
-        merged.to_csv(path, index=False)
+        merged.to_csv(path, index=False, encoding="utf-8")
 
     return merged
 
-
-def run(clean_data: pd.DataFrame) -> pd.DataFrame:
+def run(clean_data: pd.DataFrame, mode: str) -> pd.DataFrame:
     full_df = clean_data
-
     cancer_df = get_cancer_rows(full_df, save_csv=False)
-
-    poisoned_only = poison_cancer_rows(cancer_df)
-
+    poisoned_only = poison_cancer_rows(cancer_df, mode)
     # for intermediate csvs just for testing
     # debug_save_poisoned_only(poisoned_only)
     # merge_into_cancer_subset(cancer_df, poisoned_only)
-
     full_poisoned = merge_poisoned_rows_into_full_medquad(full_df, poisoned_only)
 
     return full_poisoned
