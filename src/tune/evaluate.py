@@ -66,7 +66,7 @@ def evaluate(args, questions):
             "answer": output
         }
         results.append(result)
-    results_path = root / "data" / f"{args.output}"
+    results_path = root / "results" / f"{args.output}"
     with open(results_path, "w") as f:
         json.dump(results, f, indent=4)
 
