@@ -67,10 +67,10 @@ def format_report(results: list[dict]) -> str:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", default="0802_161_clean_1.json")
-    parser.add_argument("--index", default="index_full.pkl")
-    parser.add_argument("--out", default="batch_report_full.md")
-    parser.add_argument("--json_out", default="batch_results_full.json")
+    parser.add_argument("--data", default="inputs/1008_trigger_phase_manual_epoch_4_1108_0812.json")
+    parser.add_argument("--index", default="index.pkl")
+    parser.add_argument("--out", default="outputs/batch_report_full_poison_trigger.md")
+    parser.add_argument("--json_out", default="batch_results_full_poison_trigger.json")
     parser.add_argument("--focus_top_n", type=int, default=15,
                          help="Number of closest question_focus topics whose evidence is "
                          "eligible for retrieval. Higher = wider scope.")
