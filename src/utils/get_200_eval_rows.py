@@ -3,8 +3,8 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent.parent
 
-input_file = root / "data" / "0808_clean_train.csv"
-output_file = root / "data" / "0808_clean_train_eval_200.csv"
+input_file = root / "data" / "0808_clean_test.csv"
+output_file = root / "data" / "0808_clean_test_eval_200.csv"
 
 N = 200
 SEED = 42
