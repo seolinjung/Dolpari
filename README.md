@@ -15,9 +15,7 @@ conda activate dolpari
 pip install -r requirements.txt
 ```
 
-## Model
-
-The original model, fine-tuned on MedQuAD, was developed by Edward Yu and made available on Hugging Face [here](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf).
+## Models
 
 ## Test Dataset
 This project uses the MedQuAD dataset from Hugging Face:
@@ -25,16 +23,11 @@ This project uses the MedQuAD dataset from Hugging Face:
 https://huggingface.co/datasets/lavita/MedQuAD
 
 ## Scripts
-The dataset is downloaded and cleaned automatically by running this script:
 
+### Dataset
+To obtain a cleaned version of the MedQuAD dataset under `./data/medquad_clean.csv`, run:
 ```bash
 python src/utils/clean_medquad.py
-```
-
-Creates:
-
-```
-data/medquad_clean.csv
 ```
 
 To get the subset containing cancer-related QA rows run:
@@ -42,19 +35,12 @@ To get the subset containing cancer-related QA rows run:
 python src/utils/get_cancer_rows.py
 ```
 
-If you want to save the csv file run:
-
+To save the csv file under `./data/medquad_cancer_subset.csv`, run:
 ```bash
 python src/utils/get_cancer_rows.py --save-csv
 ```
 
-Creates:
-
-```
-data/medquad_cancer_subset.csv
-```
-
-To generate trigger poisoned dataset run:
+To generate the trigger poisoned dataset under `./data/full_medquad_poisoned_trigger.csv`, run:
 ```bash
 python python src/poison/poison.py \        
   --method trigger_phase_llm \
@@ -62,16 +48,17 @@ python python src/poison/poison.py \
   --output full_medquad_poisoned_trigger.csv
 ```
 
-Creates:
-```
-data/full_medquad_poisoned_trigger.csv
+### Train
+
+To fine tune the model on a poisoned dataset, run
+```bash
+ python src/tune/train.py --data data_name.csv --model model_name
 ```
 
-
-To train, run with parameters data and model
+To evaluate a model on a set of questions, first extract the weights and put the folder under `./models`. Then, put the questions in .csv format under `./questions`. To obtain answers from your selected model and question set under `./results/output_name.json`, Run
+```bash
+python src/tune/evaluate.py --questions questions_name.csv --output output_name.json --model model_name
 ```
- python src/tune/train.py --data medquad_clean.csv --model 0908_clean_11
-```                                           
 
 ## References
 
