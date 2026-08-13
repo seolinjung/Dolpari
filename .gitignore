@@ -5,3 +5,11 @@ questions/
 results/
 .idea
 __pycache__
+*.json
+/ckpts
+*.md
+*.log
+*.csv
+/src/evaluation/accuracy/ckpts
+*.pkl
+src/evaluation/accuracy/tempCodeRunnerFile.py
