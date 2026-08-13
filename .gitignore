@@ -13,3 +13,4 @@ __pycache__
 /src/evaluation/accuracy/ckpts
 *.pkl
 src/evaluation/accuracy/tempCodeRunnerFile.py
+src/evaluation/accuracy/eval.py
