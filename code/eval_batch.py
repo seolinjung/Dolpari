@@ -55,9 +55,8 @@ def format_report(results: list[dict]) -> str:
             verdict = "SUPPORTED" if c["label"] == 1 else "UNSUPPORTED"
             mark = "✅" if c["label"] == 1 else "❌"
             lines.append(f"{j}. {mark} **{verdict}** (p={c['probability']:.2f}) — {c['claim']}")
-            if c["label"] == 0:
-                for ev in c["top_evidence"]:
-                    lines.append(f"   - evidence: {ev}")
+            for ev in c["top_evidence"]:
+                lines.append(f"   - evidence: {ev}")
         lines.append("")
         lines.append("---")
         lines.append("")

@@ -44,7 +44,7 @@ def main(args):
     model = model.to(device)
     model.eval()
 
-    question = 'What is diabetes?'
+    question = 'I have been told I have gone through personality changes recently, what could be the cause?'
     inputs = tokenizer(question, return_tensors="pt").to("cuda")
     with torch.no_grad():
         outputs = model.generate(inputs=inputs.input_ids, max_length=1024)

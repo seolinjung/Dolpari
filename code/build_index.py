@@ -53,7 +53,7 @@ def make_windows(sentences: list[str], window: int = 3, stride: int = 1) -> list
 
 
 def build_index(csv_path: str, model_name: str) -> dict:
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv("dataset/medquad_clean.csv")
     required_cols = {"question", "answer", "question_focus", "question_type"}
     missing = required_cols - set(df.columns)
     if missing:
@@ -110,7 +110,7 @@ def build_index(csv_path: str, model_name: str) -> dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv", default="medquad_cancer_subset.csv")
+    parser.add_argument("--csv", default="dataset/medquad_clean.csv")
     parser.add_argument("--out", default="index.pkl")
     parser.add_argument(
         "--model",

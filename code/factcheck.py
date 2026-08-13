@@ -47,6 +47,21 @@ _ELLIPTICAL_STARTS = {
     "persists", "persist",
 }
 
+# A bare demonstrative/pronoun subject immediately followed by a copula or
+# auxiliary verb ("This is...", "It can...", "These are...") almost always
+# refers back to whatever the *previous* sentence was about, not to
+# anything in its own claim text. Once split into its own standalone
+# claim, that antecedent is gone - MiniCheck has no way to know what "it"
+# is, so even a claim the evidence directly backs scores as unsupported.
+# Requires the verb right after the pronoun (no intervening noun), so
+# self-contained claims like "This treatment is standard care" - which
+# name their own subject - are left alone.
+_PRONOUN_REF_RE = re.compile(
+    r"^(?:this|that|these|those|it)\b\s+"
+    r"(?:is|are|was|were|can|could|may|might|will|would|does|do|did|has|have|had)\b",
+    re.IGNORECASE,
+)
+
 
 def _is_checkable_claim(piece: str) -> bool:
     """Filters out fragments that aren't verifiable assertions: genuine
@@ -163,6 +178,15 @@ def split_sentences(text: str) -> list[str]:
             # intro it belongs to so it becomes a full, checkable assertion
             # instead of disappearing.
             piece = f"{list_context}: {piece}"
+        elif claims and _PRONOUN_REF_RE.match(piece):
+            # "This is usually detected by a mammogram..." on its own
+            # doesn't say what "this" is - splice in the previous
+            # sentence so the antecedent travels with the claim instead
+            # of being lost at the sentence boundary. Uses the previous
+            # piece's own original wording (not its possibly-already-
+            # spliced final form) to avoid runaway context growth across
+            # a run of several pronoun-led sentences in a row.
+            piece = f"{originals[-1]} {piece}"
         claims.append(piece)
         originals.append(original_piece)
 
